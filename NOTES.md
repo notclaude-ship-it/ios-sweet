@@ -425,3 +425,5 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
      cpu_init, before arm_vm_init.
   5. panic hook at top of panic_trap_to_debugger: va_copy + _doprnt(fmt, &copy, sweet_early_putc, 16).
   Verify with tools/xnu-cc.py (compile+symbols) and patch-order simulation before the single CI run.
+
+- **2026-11-08 22:30 (modem firmware CRC table):** the phone's `modem_a` (dump `~/backups-topaz/modem_a.img`, sha256 37b18db1...) has the same FAT16 layout as the HyperOS 2.0.208 image 0115 was written from, but only 7 of 28 files match by CRC32 (b12/b16/b19/b25 also differ in size), so TopazModem would refuse the firmware. Patch 0115 table regenerated from the phone's own partition (commit `25791b7`, original copy in `research/pre0115-crc/`). CI run **42524246189** passed (kernel sha256 `4d6ddc93...`, `xnu/out-crc/`). Image `shim/out/shim-boot-wifi-crc.img` (sha256 `36ae8048...`): wifi=1, sweetusb=2, 1.5 GB RAM, same cmdline/ADT as shim-boot-wifi.img. NOT yet booted: phone not seen by adb/fastboot at 22:30. Next: boot it, `tools/sweet-usbnet.sh`, look for the TopazModem lines (firmware CRC ok / modem boot / WLFW).
