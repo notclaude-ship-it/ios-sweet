@@ -1,0 +1,29 @@
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -32,6 +32,8 @@
+ #define TOUCH_MAX        10u
+ #define TOUCH_GOODIX     1
+ #define TOUCH_FTS        2
++#define TOUCH_FTS_RAW_X  1350u /* FT5452 raw range, scaled to 1080 */
++#define TOUCH_FTS_RAW_Y  3000u /* scaled to 2400 */
+ /* GT9896 is Yellowstone in Xiaomi sweet-r-oss, not the Berlin protocol. */
+ #define GOODIX_PID_REG   0x4022u
+ #define GOODIX_EVENT_REG 0x4180u
+@@ -472,9 +474,16 @@
+ 		}
+ 		unsigned px = ((unsigned)(p[0] & 15u) << 8) | p[1];
+ 		unsigned py = ((unsigned)(p[2] & 15u) << 8) | p[3];
+-		if (px > 1079 || py > 2399) {
++		/*
++		 * FT5452 (replacement/topaz-style panel): raw range is 1350x3000,
++		 * 1.25x the 1080x2400 display. Scale back so the rest of the stack
++		 * (HID mapping, edge detection) keeps its 1080x2400 assumption.
++		 */
++		if (px >= TOUCH_FTS_RAW_X || py >= TOUCH_FTS_RAW_Y) {
+ 			return EIO;
+ 		}
++		px = px * 1080u / TOUCH_FTS_RAW_X;
++		py = py * 2400u / TOUCH_FTS_RAW_Y;
+ 		mask |= 1u << id;
+ 		x[id] = (int)px;
+ 		y[id] = (int)py;
