@@ -1,0 +1,81 @@
+name: userland-gpu
+
+# Mesa 25.0.7 (freedreno + softpipe) for iOS, plus the OpenGL ES library behind EAGLContext
+# (libtopaz-gl), the loader (libtopaz-inject) and the backboardd wrapper (bbd_wrap).
+# Output artifact "topaz-userland": /topaz/lib/* and backboardd wrapper, ready to copy into the iOS root.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [topaz]
+    paths:
+      - ".github/workflows/userland-gpu.yml"
+      - "userland/gpu/**"
+      - "userland/mesa/**"
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deps
+        run: |
+          brew install meson ninja bison flex
+          xcrun --sdk iphoneos --show-sdk-path
+          clang --version | head -1
+
+      - name: Mesa (freedreno + softpipe, OSMesa)
+        run: |
+          mkdir -p userland/mesa/build-mesa
+          bash userland/mesa/mk-mesa-mac.sh
+          ls -l userland/mesa/build-mesa/out
+
+      - name: iPhoneOS 16.5 SDK with IOKit headers (Theos)
+        run: |
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/theos/sdks theos-sdks
+          git -C theos-sdks sparse-checkout set iPhoneOS16.5.sdk
+          ls theos-sdks/iPhoneOS16.5.sdk | head
+
+      - name: mkeagl.py and the QuartzCore slot table (HackiOS, MIT)
+        run: |
+          git clone -q --depth 1 https://github.com/oosexgang/hackios-xnu-kernel hakios
+          ls hakios/userland/mkeagl.py hakios/userland/src/eagl_slots.txt
+
+      - name: Build libtopaz-gl, libtopaz-inject, backboardd wrapper
+        run: |
+          set -ex
+          SDK="$PWD/theos-sdks/iPhoneOS16.5.sdk"
+          M=userland/mesa/build-mesa/out
+          mkdir -p obj out/topaz/lib out/usr/libexec
+          CC="clang -target arm64-apple-ios16.0 -isysroot $SDK -O1"
+          python3 hakios/userland/mkeagl.py hakios/userland/src/eagl_slots.txt $M/gl.xml $M/exported-gl.txt userland/gpu/eagl.c > obj/eagl_gen.h
+          $CC -dynamiclib -install_name /topaz/lib/libtopaz-gl.dylib -Iobj -Iuserland/gpu \
+            -framework CoreFoundation -framework IOKit -framework IOSurface -lobjc $M/libOSMesa.8.dylib \
+            -o out/topaz/lib/libtopaz-gl.dylib userland/gpu/eagl.c userland/gpu/gl_osmesa.c
+          $CC -dynamiclib -install_name /topaz/lib/libtopaz-inject.dylib -Iuserland/gpu \
+            -framework CoreFoundation -framework IOKit -lobjc \
+            -o out/topaz/lib/libtopaz-inject.dylib userland/gpu/topaz_inject.c
+          $CC -o out/usr/libexec/backboardd userland/gpu/bbd_wrap.c
+          cp $M/libOSMesa.8.dylib out/topaz/lib/
+          for f in out/topaz/lib/*.dylib out/usr/libexec/backboardd; do codesign -f -s - "$f"; done
+          file out/topaz/lib/* out/usr/libexec/backboardd
+          (cd out && find . -type f -exec shasum -a 256 {} \; > SHA256SUMS)
+          cat out/SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: topaz-userland
+          path: out/
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mesa-logs
+          path: |
+            userland/mesa/build-mesa/meson-setup.log
+            userland/mesa/build-mesa/ninja.log
+          if-no-files-found: ignore
