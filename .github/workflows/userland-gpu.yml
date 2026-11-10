@@ -28,9 +28,11 @@ jobs:
 
       - name: Mesa (freedreno + softpipe, OSMesa)
         run: |
-          mkdir -p userland/mesa/build-mesa
-          bash userland/mesa/mk-mesa-mac.sh
-          ls -l userland/mesa/build-mesa/out
+          # the script expects its patches in ./mesa next to it: run a copy from userland/
+          cp userland/mesa/mk-mesa-mac.sh userland/mk-mesa-mac.sh
+          mkdir -p userland/build-mesa
+          bash userland/mk-mesa-mac.sh
+          ls -l userland/build-mesa/out
 
       - name: iPhoneOS 16.5 SDK with IOKit headers (Theos)
         run: |
@@ -47,7 +49,7 @@ jobs:
         run: |
           set -ex
           SDK="$PWD/theos-sdks/iPhoneOS16.5.sdk"
-          M=userland/mesa/build-mesa/out
+          M=userland/build-mesa/out
           mkdir -p obj out/topaz/lib out/usr/libexec
           CC="clang -target arm64-apple-ios16.0 -isysroot $SDK -O1"
           python3 hakios/userland/mkeagl.py hakios/userland/src/eagl_slots.txt $M/gl.xml $M/exported-gl.txt userland/gpu/eagl.c > obj/eagl_gen.h
@@ -76,6 +78,6 @@ jobs:
         with:
           name: mesa-logs
           path: |
-            userland/mesa/build-mesa/meson-setup.log
-            userland/mesa/build-mesa/ninja.log
+            userland/build-mesa/meson-setup.log
+            userland/build-mesa/ninja.log
           if-no-files-found: ignore
